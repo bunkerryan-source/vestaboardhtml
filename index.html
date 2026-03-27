@@ -12,7 +12,6 @@
     width: 100%; height: 100%;
     overflow: hidden;
     font-family: "Helvetica Neue", "Inter", Arial, sans-serif;
-    transition: background-color 2s ease;
   }
 
   body {
@@ -22,20 +21,17 @@
   }
 
   /* ===== FRAME & BACKGROUND ===== */
-  /* The board housing is ALWAYS dark — tiles are always dark modules.
-     Only the letter color changes between day/night modes. */
   body { background-color: #0a0a0a; }
 
-  /* The frame wrapper: thin border → flat background → tiles */
   #frame {
     display: flex;
     align-items: center;
     justify-content: center;
     width: 100%;
     height: 100%;
-    /* Thin picture-frame border at viewport edge */
-    border: 3px solid #1c1c1c;
-    background-color: #0d0d0d; /* flat matte black behind tiles — always */
+    /* Picture-frame border at viewport edge */
+    border: 8px solid #1c1c1c;
+    background-color: #0d0d0d; /* flat matte black behind tiles */
   }
 
   /* ===== BOARD ===== */
@@ -123,7 +119,7 @@
   /* Board sizing is computed in JS to maintain proper tile proportions */
 </style>
 </head>
-<body class="bg-black">
+<body>
 
 <div id="frame">
   <div id="board"></div>
@@ -153,7 +149,6 @@
   let isFlipping = false;
   let rotationTimer = null;
   let configRefreshTimer = null;
-  let isDaytime = true;
   let audioCtx = null;
   let clickBuffer = null;
   let soundReady = false;
@@ -265,8 +260,6 @@
           background: 'black',
           sound_enabled: false,
           sound_volume: 0.5,
-          day_start_hour: 7,
-          night_start_hour: 20,
           symbols: [],
           messages: [{ text: FALLBACK_MESSAGE, schedule: 'always' }]
         };
@@ -283,10 +276,14 @@
     // Update background
     updateBackground();
 
-    // Build message list
-    messages = (config.messages || []).filter(m => m && m.text);
+    // Build message list — supports plain strings or {text: "..."} objects
+    messages = (config.messages || []).map(m => {
+      if (typeof m === 'string') return { text: m };
+      if (m && m.text) return m;
+      return null;
+    }).filter(Boolean);
     if (messages.length === 0) {
-      messages = [{ text: FALLBACK_MESSAGE, schedule: 'always' }];
+      messages = [{ text: FALLBACK_MESSAGE }];
     }
 
     // Init sound
@@ -315,21 +312,18 @@
   }
 
   // ===== BACKGROUND =====
+  // Simple: "black" (default) or "white" — set in config.json
   function updateBackground() {
     const bg = config.background || 'black';
-    const hour = new Date().getHours();
-    const dayStart = config.day_start_hour || 7;
-    const nightStart = config.night_start_hour || 20;
-
-    if (bg === 'auto') {
-      isDaytime = hour >= dayStart && hour < nightStart;
-    } else if (bg === 'white') {
-      isDaytime = true;
+    if (bg === 'white') {
+      document.body.style.backgroundColor = '#e8e8e8';
+      document.getElementById('frame').style.backgroundColor = '#d4d4d4';
+      document.getElementById('frame').style.borderColor = '#bbb';
     } else {
-      isDaytime = false;
+      document.body.style.backgroundColor = '#0a0a0a';
+      document.getElementById('frame').style.backgroundColor = '#0d0d0d';
+      document.getElementById('frame').style.borderColor = '#1c1c1c';
     }
-
-    document.body.className = isDaytime ? 'bg-white' : 'bg-black';
   }
 
   // ===== MESSAGE FORMATTING =====
@@ -563,8 +557,6 @@
 
   // ===== MESSAGE ROTATION =====
   function showNextMessage() {
-    updateBackground(); // check time-of-day on each rotation
-
     const eligible = getEligibleMessages();
     if (eligible.length === 0) return;
 
@@ -578,18 +570,7 @@
   }
 
   function getEligibleMessages() {
-    const hour = new Date().getHours();
-    const dayStart = config.day_start_hour || 7;
-    const nightStart = config.night_start_hour || 20;
-    const isDay = hour >= dayStart && hour < nightStart;
-
-    return messages.filter(m => {
-      const sched = m.schedule || 'always';
-      if (sched === 'always') return true;
-      if (sched === 'day_only' && isDay) return true;
-      if (sched === 'night_only' && !isDay) return true;
-      return false;
-    });
+    return messages;
   }
 
   function startRotation() {
