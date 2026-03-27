@@ -583,9 +583,9 @@
         const d = buf.getChannelData(0);
 
         // Each variation has slightly different character
-        const thunkFreq = 180 + Math.random() * 60;   // low thunk 180-240Hz
-        const tickFreq = 2800 + Math.random() * 800;   // high tick 2800-3600Hz
-        const rattleFreq = 800 + Math.random() * 400;  // mid rattle 800-1200Hz
+        const thunkFreq = 350 + Math.random() * 100;   // mid thunk 350-450Hz
+        const tickFreq = 4500 + Math.random() * 1200;  // high tick 4500-5700Hz
+        const rattleFreq = 1400 + Math.random() * 600; // mid-high rattle 1400-2000Hz
         const attackSharpness = 400 + Math.random() * 200;
 
         for (let i = 0; i < len; i++) {
@@ -637,12 +637,12 @@
       source.playbackRate.value = 0.85 + Math.random() * 0.3; // pitch variation
 
       const gain = audioCtx.createGain();
-      gain.gain.value = (config.sound_volume || 0.5) * (0.15 + Math.random() * 0.25);
+      gain.gain.value = (config.sound_volume || 0.5) * (0.08 + Math.random() * 0.14);
 
       // Subtle low-pass filter to soften — real flaps are muffled, not crisp
       const filter = audioCtx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.value = 4000 + Math.random() * 2000;
+      filter.frequency.value = 6000 + Math.random() * 3000;
       filter.Q.value = 0.5;
 
       source.connect(filter);
