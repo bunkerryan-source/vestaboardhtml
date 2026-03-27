@@ -575,43 +575,27 @@
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const sr = audioCtx.sampleRate;
 
-      // Generate several click variations for natural feel
+      // Generate light, thin click variations — just a high tick + tiny noise wisp
       for (let v = 0; v < 5; v++) {
-        const duration = 0.035 + Math.random() * 0.015; // 35-50ms
+        const duration = 0.012 + Math.random() * 0.006; // very short: 12-18ms
         const len = Math.floor(sr * duration);
         const buf = audioCtx.createBuffer(1, len, sr);
         const d = buf.getChannelData(0);
 
-        // Each variation has slightly different character
-        const thunkFreq = 350 + Math.random() * 100;   // mid thunk 350-450Hz
-        const tickFreq = 4500 + Math.random() * 1200;  // high tick 4500-5700Hz
-        const rattleFreq = 1400 + Math.random() * 600; // mid-high rattle 1400-2000Hz
-        const attackSharpness = 400 + Math.random() * 200;
+        const tickFreq = 5500 + Math.random() * 2000; // high tick 5500-7500Hz
 
         for (let i = 0; i < len; i++) {
           const t = i / sr;
 
-          // Layer 1: Low thunk (the flap body hitting)
-          const thunkEnv = Math.exp(-t * attackSharpness) * 0.5;
-          const thunk = Math.sin(2 * Math.PI * thunkFreq * t) * thunkEnv;
-
-          // Layer 2: High tick (latch/detent catching)
-          const tickEnv = Math.exp(-t * 800) * 0.25;
+          // Light high-frequency tick — fast decay
+          const tickEnv = Math.exp(-t * 1200) * 0.4;
           const tick = Math.sin(2 * Math.PI * tickFreq * t) * tickEnv;
 
-          // Layer 3: Brief noise burst (mechanical rattle/friction)
-          const noiseEnv = Math.exp(-t * 500) * 0.35;
+          // Tiny noise wisp — very quiet, very fast decay
+          const noiseEnv = Math.exp(-t * 1500) * 0.12;
           const noise = (Math.random() * 2 - 1) * noiseEnv;
 
-          // Layer 4: Mid-frequency resonance (plastic body vibration)
-          const resEnv = Math.exp(-t * 250) * 0.15;
-          const resonance = Math.sin(2 * Math.PI * rattleFreq * t) * resEnv;
-
-          // Layer 5: Very short initial impact transient
-          const impactEnv = (i < sr * 0.003) ? (1 - t / 0.003) * 0.3 : 0;
-          const impact = (Math.random() * 2 - 1) * impactEnv;
-
-          d[i] = thunk + tick + noise + resonance + impact;
+          d[i] = tick + noise;
         }
 
         flapBuffers.push(buf);
@@ -634,19 +618,12 @@
 
       const source = audioCtx.createBufferSource();
       source.buffer = buf;
-      source.playbackRate.value = 0.85 + Math.random() * 0.3; // pitch variation
+      source.playbackRate.value = 0.9 + Math.random() * 0.2;
 
       const gain = audioCtx.createGain();
-      gain.gain.value = (config.sound_volume || 0.5) * (0.08 + Math.random() * 0.14);
+      gain.gain.value = (config.sound_volume || 0.5) * (0.06 + Math.random() * 0.08);
 
-      // Subtle low-pass filter to soften — real flaps are muffled, not crisp
-      const filter = audioCtx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = 6000 + Math.random() * 3000;
-      filter.Q.value = 0.5;
-
-      source.connect(filter);
-      filter.connect(gain);
+      source.connect(gain);
       gain.connect(audioCtx.destination);
       source.start();
     } catch (e) {
@@ -658,11 +635,7 @@
     // Rapid clicking during flip — irregular timing like real mechanism
     const interval = setInterval(() => {
       playClick();
-      // Occasionally double-click for realism (two flaps landing close together)
-      if (Math.random() < 0.3) {
-        setTimeout(playClick, 8 + Math.random() * 15);
-      }
-    }, 35 + Math.random() * 25);
+    }, 45 + Math.random() * 30);
     return interval;
   }
 
