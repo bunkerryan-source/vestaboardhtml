@@ -21,8 +21,9 @@
     justify-content: center;
   }
 
-  body.bg-black { background-color: #1a1a1a; }
-  body.bg-white { background-color: #e8e8e8; }
+  /* Background covers entire viewport — seamless with tile background */
+  body.bg-black { background-color: #111; }
+  body.bg-white { background-color: #e0e0e0; }
 
   /* ===== BOARD ===== */
   #board {
@@ -30,19 +31,14 @@
     grid-template-columns: repeat(22, 1fr);
     grid-template-rows: repeat(6, 1fr);
     gap: 4px;
-    padding: 12px;
-    background: #111;
-    border-radius: 8px;
-    box-shadow:
-      0 4px 20px rgba(0,0,0,0.5),
-      inset 0 1px 0 rgba(255,255,255,0.05);
+    padding: 0;
+    background: transparent;
   }
 
   /* ===== TILE ===== */
   .tile {
     position: relative;
     width: 100%;
-    aspect-ratio: 1 / 1.15;
     perspective: 600px;
     display: flex;
     align-items: center;
@@ -56,8 +52,8 @@
     align-items: center;
     justify-content: center;
     border-radius: 3px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
+    font-weight: 400;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     user-select: none;
     position: relative;
@@ -83,9 +79,8 @@
     pointer-events: none;
   }
 
-  /* Letter color based on background mode */
-  body.bg-black .tile-inner { color: #f0f0f0; }
-  body.bg-white .tile-inner { color: #f0f0f0; }
+  /* Letter color — always light on dark tiles */
+  .tile-inner { color: #f0f0f0; }
 
   /* ===== FLIP ANIMATION ===== */
   .tile-inner.flipping {
@@ -99,7 +94,7 @@
   }
 
   /* ===== RESPONSIVE SIZING ===== */
-  /* Board sizing is computed in JS to maintain square-ish tile proportions */
+  /* Board sizing is computed in JS to maintain proper tile proportions */
 </style>
 </head>
 <body class="bg-black">
@@ -113,12 +108,13 @@
   // ===== CONSTANTS =====
   const ROWS = 6;
   const COLS = 22;
-  const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?.,-\'&: ';
+  // Only letters and numbers for clean intermediate cycling
+  const FLIP_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const FALLBACK_MESSAGE = "HANG TIGHT I'LL BE RIGHT BACK";
   const WAVE_DURATION_MS = 1500; // 1.5 seconds for wave to sweep across all columns
-  const COLUMN_DELAY_MS = WAVE_DURATION_MS / COLS;
   const FLIPS_PER_TILE = 8; // number of intermediate characters before landing
   const FLIP_INTERVAL_MS = 60; // ms between each intermediate flip
+  const TILE_ASPECT = 1.35; // height/width ratio — vertical rectangle like real Vestaboard
 
   // ===== STATE =====
   let config = null;
@@ -179,20 +175,21 @@
   function sizeBoard() {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const padding = 24; // board padding
     const gap = 4;
+    const margin = 16; // small breathing room from edges
 
-    // Target: roughly square tiles with aspect ratio ~1:1.15
-    // Calculate maximum tile size that fits
-    const availW = vw * 0.95 - padding * 2;
-    const availH = vh * 0.92 - padding * 2;
+    // Available space for tiles
+    const availW = vw - margin * 2;
+    const availH = vh - margin * 2;
 
+    // Calculate tile size constrained by width
     const tileW_fromWidth = (availW - gap * (COLS - 1)) / COLS;
-    const tileH_fromWidth = tileW_fromWidth * 1.15;
+    const tileH_fromWidth = tileW_fromWidth * TILE_ASPECT;
     const totalH_fromWidth = tileH_fromWidth * ROWS + gap * (ROWS - 1);
 
+    // Calculate tile size constrained by height
     const tileH_fromHeight = (availH - gap * (ROWS - 1)) / ROWS;
-    const tileW_fromHeight = tileH_fromHeight / 1.15;
+    const tileW_fromHeight = tileH_fromHeight / TILE_ASPECT;
     const totalW_fromHeight = tileW_fromHeight * COLS + gap * (COLS - 1);
 
     let tileW, tileH;
@@ -204,14 +201,20 @@
       tileH = tileH_fromHeight;
     }
 
-    const boardW = tileW * COLS + gap * (COLS - 1) + padding * 2;
-    const boardH = tileH * ROWS + gap * (ROWS - 1) + padding * 2;
+    const boardW = tileW * COLS + gap * (COLS - 1);
+    const boardH = tileH * ROWS + gap * (ROWS - 1);
 
     board.style.width = boardW + 'px';
     board.style.height = boardH + 'px';
 
-    // Font size relative to tile size
-    const fontSize = tileW * 0.55;
+    // Set explicit tile heights since we're not using aspect-ratio CSS
+    const tileEls = board.querySelectorAll('.tile');
+    tileEls.forEach(t => {
+      t.style.height = tileH + 'px';
+    });
+
+    // Font size relative to tile width — lighter weight needs slightly larger size
+    const fontSize = tileW * 0.52;
     board.style.fontSize = fontSize + 'px';
   }
 
@@ -507,9 +510,9 @@
         return;
       }
 
-      // Intermediate flip: random character
-      const randChar = CHARS[Math.floor(Math.random() * CHARS.length)];
-      inner.textContent = randChar === ' ' ? '' : randChar;
+      // Intermediate flip: only letters and numbers (clean cycling)
+      const randChar = FLIP_CHARS[Math.floor(Math.random() * FLIP_CHARS.length)];
+      inner.textContent = randChar;
       inner.style.color = ''; // default color during cycling
       inner.classList.remove('flipping');
       void inner.offsetWidth;
@@ -574,7 +577,6 @@
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
       // Generate a mechanical click sound using synthesis
-      // (More reliable than base64 audio on diverse devices)
       const sampleRate = audioCtx.sampleRate;
       const duration = 0.015; // 15ms click
       const length = Math.floor(sampleRate * duration);
