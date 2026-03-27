@@ -21,16 +21,38 @@
     justify-content: center;
   }
 
-  /* Background covers entire viewport — seamless with tile background */
-  body.bg-black { background-color: #111; }
-  body.bg-white { background-color: #e0e0e0; }
+  /* ===== FRAME BORDER (outermost layer) ===== */
+  body.bg-black { background-color: #0a0a0a; }
+  body.bg-white { background-color: #c8c8c8; }
+
+  /* The frame wrapper: thin border → flat background → tiles */
+  #frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    /* Thin picture-frame border */
+    border: 3px solid #1a1a1a;
+    transition: border-color 2s ease, background-color 2s ease;
+  }
+
+  body.bg-black #frame {
+    border-color: #222;
+    background-color: #0d0d0d; /* flat matte black behind tiles */
+  }
+
+  body.bg-white #frame {
+    border-color: #aaa;
+    background-color: #d0d0d0; /* flat matte light behind tiles */
+  }
 
   /* ===== BOARD ===== */
   #board {
     display: grid;
     grid-template-columns: repeat(22, 1fr);
     grid-template-rows: repeat(6, 1fr);
-    gap: 4px;
+    gap: 5px;
     padding: 0;
     background: transparent;
   }
@@ -39,7 +61,7 @@
   .tile {
     position: relative;
     width: 100%;
-    perspective: 600px;
+    perspective: 800px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -51,31 +73,44 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 3px;
+    border-radius: 2px;
     font-weight: 400;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     user-select: none;
     position: relative;
     transform-style: preserve-3d;
-    /* tile face styling */
-    background: linear-gradient(180deg, #2a2a2a 0%, #1e1e1e 50%, #222 100%);
-    border: 1px solid #333;
+    /* Tile face: subtle top-to-bottom gradient for physical depth */
+    background: linear-gradient(180deg,
+      #303030 0%,
+      #262626 15%,
+      #1c1c1c 50%,
+      #191919 85%,
+      #151515 100%
+    );
+    /* Beveled edge: light top-left, dark bottom-right */
+    border-top: 1px solid #3a3a3a;
+    border-left: 1px solid #353535;
+    border-right: 1px solid #111;
+    border-bottom: 1px solid #0a0a0a;
+    /* Depth: raised from the flat background */
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.08),
-      inset 0 -1px 0 rgba(0,0,0,0.3),
-      0 2px 4px rgba(0,0,0,0.4);
+      inset 0 1px 0 rgba(255,255,255,0.07),
+      inset 0 -1px 0 rgba(0,0,0,0.2),
+      0 1px 2px rgba(0,0,0,0.5),
+      0 2px 6px rgba(0,0,0,0.3);
   }
 
   /* Horizontal split line (like a real split-flap) */
   .tile-inner::after {
     content: '';
     position: absolute;
-    left: 5%;
-    right: 5%;
-    top: 49.5%;
+    left: 4%;
+    right: 4%;
+    top: 50%;
     height: 1px;
-    background: rgba(0,0,0,0.4);
+    background: rgba(0,0,0,0.5);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.03);
     pointer-events: none;
   }
 
@@ -99,7 +134,9 @@
 </head>
 <body class="bg-black">
 
-<div id="board"></div>
+<div id="frame">
+  <div id="board"></div>
+</div>
 
 <script>
 (function() {
@@ -175,12 +212,13 @@
   function sizeBoard() {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const gap = 4;
-    const margin = 16; // small breathing room from edges
+    const gap = 5;
+    const frameBorder = 3; // picture frame border width
+    const framePad = 24; // breathing room between frame edge and tiles
 
-    // Available space for tiles
-    const availW = vw - margin * 2;
-    const availH = vh - margin * 2;
+    // Available space for tiles (inside frame border + padding)
+    const availW = vw - (frameBorder + framePad) * 2;
+    const availH = vh - (frameBorder + framePad) * 2;
 
     // Calculate tile size constrained by width
     const tileW_fromWidth = (availW - gap * (COLS - 1)) / COLS;
