@@ -21,9 +21,10 @@
     justify-content: center;
   }
 
-  /* ===== FRAME BORDER (outermost layer) ===== */
-  body.bg-black { background-color: #0a0a0a; }
-  body.bg-white { background-color: #c8c8c8; }
+  /* ===== FRAME & BACKGROUND ===== */
+  /* The board housing is ALWAYS dark — tiles are always dark modules.
+     Only the letter color changes between day/night modes. */
+  body { background-color: #0a0a0a; }
 
   /* The frame wrapper: thin border → flat background → tiles */
   #frame {
@@ -32,19 +33,9 @@
     justify-content: center;
     width: 100%;
     height: 100%;
-    /* Thin picture-frame border */
-    border: 3px solid #1a1a1a;
-    transition: border-color 2s ease, background-color 2s ease;
-  }
-
-  body.bg-black #frame {
-    border-color: #222;
-    background-color: #0d0d0d; /* flat matte black behind tiles */
-  }
-
-  body.bg-white #frame {
-    border-color: #aaa;
-    background-color: #d0d0d0; /* flat matte light behind tiles */
+    /* Thin picture-frame border at viewport edge */
+    border: 3px solid #1c1c1c;
+    background-color: #0d0d0d; /* flat matte black behind tiles — always */
   }
 
   /* ===== BOARD ===== */
@@ -80,25 +71,25 @@
     user-select: none;
     position: relative;
     transform-style: preserve-3d;
-    /* Tile face: subtle top-to-bottom gradient for physical depth */
+    /* Tile face: top-to-bottom gradient for physical depth */
     background: linear-gradient(180deg,
-      #303030 0%,
-      #262626 15%,
-      #1c1c1c 50%,
-      #191919 85%,
-      #151515 100%
+      #363636 0%,
+      #2c2c2c 12%,
+      #222222 45%,
+      #1a1a1a 80%,
+      #141414 100%
     );
     /* Beveled edge: light top-left, dark bottom-right */
-    border-top: 1px solid #3a3a3a;
-    border-left: 1px solid #353535;
-    border-right: 1px solid #111;
-    border-bottom: 1px solid #0a0a0a;
+    border-top: 1px solid #444;
+    border-left: 1px solid #3c3c3c;
+    border-right: 1px solid #0e0e0e;
+    border-bottom: 1px solid #080808;
     /* Depth: raised from the flat background */
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.07),
-      inset 0 -1px 0 rgba(0,0,0,0.2),
-      0 1px 2px rgba(0,0,0,0.5),
-      0 2px 6px rgba(0,0,0,0.3);
+      inset 0 1px 1px rgba(255,255,255,0.09),
+      inset 0 -1px 1px rgba(0,0,0,0.25),
+      0 1px 3px rgba(0,0,0,0.6),
+      0 3px 8px rgba(0,0,0,0.35);
   }
 
   /* Horizontal split line (like a real split-flap) */
@@ -149,8 +140,8 @@
   const FLIP_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const FALLBACK_MESSAGE = "HANG TIGHT I'LL BE RIGHT BACK";
   const WAVE_DURATION_MS = 1500; // 1.5 seconds for wave to sweep across all columns
-  const FLIPS_PER_TILE = 8; // number of intermediate characters before landing
-  const FLIP_INTERVAL_MS = 60; // ms between each intermediate flip
+  const FLIPS_PER_TILE = 7; // number of intermediate characters before landing
+  const FLIP_INTERVAL_MS = 40; // ms between each intermediate flip
   const TILE_ASPECT = 1.35; // height/width ratio — vertical rectangle like real Vestaboard
 
   // ===== STATE =====
