@@ -3,3 +3,5 @@ MEMORY.md
 vestaboardhtml-prompt.md
 *.md
 !README.md
+
+.vercel
