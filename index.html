@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vestaboard</title>
+<style>
+  /* ===== RESET & BASE ===== */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    font-family: "Helvetica Neue", "Inter", Arial, sans-serif;
+    transition: background-color 2s ease;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  body.bg-black { background-color: #1a1a1a; }
+  body.bg-white { background-color: #e8e8e8; }
+
+  /* ===== BOARD ===== */
+  #board {
+    display: grid;
+    grid-template-columns: repeat(22, 1fr);
+    grid-template-rows: repeat(6, 1fr);
+    gap: 4px;
+    padding: 12px;
+    background: #111;
+    border-radius: 8px;
+    box-shadow:
+      0 4px 20px rgba(0,0,0,0.5),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  /* ===== TILE ===== */
+  .tile {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1.15;
+    perspective: 600px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tile-inner {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    user-select: none;
+    position: relative;
+    transform-style: preserve-3d;
+    /* tile face styling */
+    background: linear-gradient(180deg, #2a2a2a 0%, #1e1e1e 50%, #222 100%);
+    border: 1px solid #333;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      inset 0 -1px 0 rgba(0,0,0,0.3),
+      0 2px 4px rgba(0,0,0,0.4);
+  }
+
+  /* Horizontal split line (like a real split-flap) */
+  .tile-inner::after {
+    content: '';
+    position: absolute;
+    left: 5%;
+    right: 5%;
+    top: 49.5%;
+    height: 1px;
+    background: rgba(0,0,0,0.4);
+    pointer-events: none;
+  }
+
+  /* Letter color based on background mode */
+  body.bg-black .tile-inner { color: #f0f0f0; }
+  body.bg-white .tile-inner { color: #f0f0f0; }
+
+  /* ===== FLIP ANIMATION ===== */
+  .tile-inner.flipping {
+    animation: flapDown 0.08s ease-in-out;
+  }
+
+  @keyframes flapDown {
+    0%   { transform: rotateX(0deg); }
+    50%  { transform: rotateX(-12deg); }
+    100% { transform: rotateX(0deg); }
+  }
+
+  /* ===== RESPONSIVE SIZING ===== */
+  /* Board sizing is computed in JS to maintain square-ish tile proportions */
+</style>
+</head>
+<body class="bg-black">
+
+<div id="board"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ===== CONSTANTS =====
+  const ROWS = 6;
+  const COLS = 22;
+  const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?.,-\'&: ';
+  const FALLBACK_MESSAGE = "HANG TIGHT I'LL BE RIGHT BACK";
+  const WAVE_DURATION_MS = 1500; // 1.5 seconds for wave to sweep across all columns
+  const COLUMN_DELAY_MS = WAVE_DURATION_MS / COLS;
+  const FLIPS_PER_TILE = 8; // number of intermediate characters before landing
+  const FLIP_INTERVAL_MS = 60; // ms between each intermediate flip
+
+  // ===== STATE =====
+  let config = null;
+  let currentGrid = []; // 6x22 array of current displayed chars
+  let currentColors = []; // 6x22 array of current tile colors (null = default)
+  let messages = [];
+  let messageIndex = 0;
+  let isFlipping = false;
+  let rotationTimer = null;
+  let configRefreshTimer = null;
+  let isDaytime = true;
+  let audioCtx = null;
+  let clickBuffer = null;
+  let soundReady = false;
+
+  // ===== DOM =====
+  const board = document.getElementById('board');
+  const tiles = [];
+
+  // ===== INIT =====
+  function init() {
+    buildGrid();
+    sizeBoard();
+    window.addEventListener('resize', sizeBoard);
+
+    // Initialize grid to blank
+    for (let r = 0; r < ROWS; r++) {
+      currentGrid[r] = [];
+      currentColors[r] = [];
+      for (let c = 0; c < COLS; c++) {
+        currentGrid[r][c] = ' ';
+        currentColors[r][c] = null;
+      }
+    }
+
+    loadConfig();
+  }
+
+  // ===== BUILD GRID =====
+  function buildGrid() {
+    board.innerHTML = '';
+    for (let r = 0; r < ROWS; r++) {
+      tiles[r] = [];
+      for (let c = 0; c < COLS; c++) {
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        const inner = document.createElement('div');
+        inner.className = 'tile-inner';
+        inner.textContent = '';
+        tile.appendChild(inner);
+        board.appendChild(tile);
+        tiles[r][c] = inner;
+      }
+    }
+  }
+
+  // ===== SIZE BOARD =====
+  function sizeBoard() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const padding = 24; // board padding
+    const gap = 4;
+
+    // Target: roughly square tiles with aspect ratio ~1:1.15
+    // Calculate maximum tile size that fits
+    const availW = vw * 0.95 - padding * 2;
+    const availH = vh * 0.92 - padding * 2;
+
+    const tileW_fromWidth = (availW - gap * (COLS - 1)) / COLS;
+    const tileH_fromWidth = tileW_fromWidth * 1.15;
+    const totalH_fromWidth = tileH_fromWidth * ROWS + gap * (ROWS - 1);
+
+    const tileH_fromHeight = (availH - gap * (ROWS - 1)) / ROWS;
+    const tileW_fromHeight = tileH_fromHeight / 1.15;
+    const totalW_fromHeight = tileW_fromHeight * COLS + gap * (COLS - 1);
+
+    let tileW, tileH;
+    if (totalH_fromWidth <= availH) {
+      tileW = tileW_fromWidth;
+      tileH = tileH_fromWidth;
+    } else {
+      tileW = tileW_fromHeight;
+      tileH = tileH_fromHeight;
+    }
+
+    const boardW = tileW * COLS + gap * (COLS - 1) + padding * 2;
+    const boardH = tileH * ROWS + gap * (ROWS - 1) + padding * 2;
+
+    board.style.width = boardW + 'px';
+    board.style.height = boardH + 'px';
+
+    // Font size relative to tile size
+    const fontSize = tileW * 0.55;
+    board.style.fontSize = fontSize + 'px';
+  }
+
+  // ===== CONFIG LOADING =====
+  async function loadConfig() {
+    try {
+      const resp = await fetch('config.json?t=' + Date.now());
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const newConfig = await resp.json();
+      applyConfig(newConfig);
+    } catch (e) {
+      console.error('Config load failed:', e);
+      if (!config) {
+        // First load failed — show fallback
+        config = {
+          mode: 'static',
+          rotation_interval_seconds: 30,
+          config_refresh_minutes: 60,
+          background: 'black',
+          sound_enabled: false,
+          sound_volume: 0.5,
+          day_start_hour: 7,
+          night_start_hour: 20,
+          symbols: [],
+          messages: [{ text: FALLBACK_MESSAGE, schedule: 'always' }]
+        };
+        applyConfig(config);
+      }
+      // If re-fetch fails, keep using existing config (do nothing)
+    }
+  }
+
+  function applyConfig(newConfig) {
+    const isFirstLoad = !config;
+    config = newConfig;
+
+    // Update background
+    updateBackground();
+
+    // Build message list
+    messages = (config.messages || []).filter(m => m && m.text);
+    if (messages.length === 0) {
+      messages = [{ text: FALLBACK_MESSAGE, schedule: 'always' }];
+    }
+
+    // Init sound
+    if (config.sound_enabled && !soundReady) {
+      initSound();
+    }
+
+    // Start config refresh timer
+    if (configRefreshTimer) clearInterval(configRefreshTimer);
+    const refreshMs = (config.config_refresh_minutes || 60) * 60 * 1000;
+    if (refreshMs > 0) {
+      configRefreshTimer = setInterval(loadConfig, refreshMs);
+    }
+
+    if (isFirstLoad) {
+      // First load: flip in first message from blank
+      messageIndex = 0;
+      showNextMessage();
+
+      // Start rotation timer
+      startRotation();
+    } else {
+      // Config update: just restart rotation with new settings
+      startRotation();
+    }
+  }
+
+  // ===== BACKGROUND =====
+  function updateBackground() {
+    const bg = config.background || 'black';
+    const hour = new Date().getHours();
+    const dayStart = config.day_start_hour || 7;
+    const nightStart = config.night_start_hour || 20;
+
+    if (bg === 'auto') {
+      isDaytime = hour >= dayStart && hour < nightStart;
+    } else if (bg === 'white') {
+      isDaytime = true;
+    } else {
+      isDaytime = false;
+    }
+
+    document.body.className = isDaytime ? 'bg-white' : 'bg-black';
+  }
+
+  // ===== MESSAGE FORMATTING =====
+  function parseMessage(text) {
+    // Replace {shortcode} with symbol objects, split into characters
+    const symbols = config.symbols || [];
+    const result = [];
+    let i = 0;
+    const upper = text.toUpperCase();
+
+    while (i < upper.length) {
+      if (upper[i] === '{') {
+        const end = upper.indexOf('}', i);
+        if (end !== -1) {
+          const code = text.substring(i + 1, end).toLowerCase();
+          const sym = symbols.find(s => s.shortcode === code);
+          if (sym) {
+            result.push({ char: sym.display, color: sym.color || null, isSymbol: true });
+          } else {
+            result.push({ char: ' ', color: null, isSymbol: false });
+          }
+          i = end + 1;
+          continue;
+        }
+      }
+      result.push({ char: upper[i], color: null, isSymbol: false });
+      i++;
+    }
+    return result;
+  }
+
+  function layoutMessage(parsed) {
+    // Word-wrap and center on the 6x22 grid
+    // First, split into words
+    const words = [];
+    let currentWord = [];
+
+    for (const ch of parsed) {
+      if (ch.char === ' ' && !ch.isSymbol) {
+        if (currentWord.length > 0) {
+          words.push(currentWord);
+          currentWord = [];
+        }
+      } else {
+        currentWord.push(ch);
+      }
+    }
+    if (currentWord.length > 0) words.push(currentWord);
+
+    // Lay out words into lines
+    const lines = [];
+    let currentLine = [];
+    let lineLen = 0;
+
+    for (const word of words) {
+      const needed = lineLen === 0 ? word.length : word.length + 1;
+      if (lineLen + needed <= COLS) {
+        if (lineLen > 0) {
+          currentLine.push({ char: ' ', color: null, isSymbol: false });
+          lineLen++;
+        }
+        currentLine.push(...word);
+        lineLen += word.length;
+      } else if (word.length <= COLS) {
+        lines.push(currentLine);
+        currentLine = [...word];
+        lineLen = word.length;
+      } else {
+        // Word too long for a single line — force split
+        if (currentLine.length > 0) lines.push(currentLine);
+        currentLine = [];
+        lineLen = 0;
+        for (const ch of word) {
+          currentLine.push(ch);
+          lineLen++;
+          if (lineLen >= COLS) {
+            lines.push(currentLine);
+            currentLine = [];
+            lineLen = 0;
+          }
+        }
+      }
+    }
+    if (currentLine.length > 0) lines.push(currentLine);
+
+    // Truncate to ROWS lines
+    const usedLines = lines.slice(0, ROWS);
+
+    // Build the grid (centered horizontally and vertically)
+    const grid = [];
+    const colors = [];
+    for (let r = 0; r < ROWS; r++) {
+      grid[r] = [];
+      colors[r] = [];
+      for (let c = 0; c < COLS; c++) {
+        grid[r][c] = ' ';
+        colors[r][c] = null;
+      }
+    }
+
+    const startRow = Math.floor((ROWS - usedLines.length) / 2);
+
+    for (let i = 0; i < usedLines.length; i++) {
+      const row = startRow + i;
+      if (row >= ROWS) break;
+      const line = usedLines[i];
+      const startCol = Math.floor((COLS - line.length) / 2);
+      for (let j = 0; j < line.length; j++) {
+        const col = startCol + j;
+        if (col >= COLS) break;
+        grid[row][col] = line[j].char;
+        colors[row][col] = line[j].color;
+      }
+    }
+
+    return { grid, colors };
+  }
+
+  // ===== FLIP ENGINE =====
+  function flipToGrid(targetGrid, targetColors) {
+    if (isFlipping) return;
+    isFlipping = true;
+
+    // Determine which tiles need to change
+    const changes = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (currentGrid[r][c] !== targetGrid[r][c] || currentColors[r][c] !== targetColors[r][c]) {
+          changes.push({ r, c, target: targetGrid[r][c], color: targetColors[r][c] });
+        }
+      }
+    }
+
+    if (changes.length === 0) {
+      isFlipping = false;
+      return;
+    }
+
+    // Start sound
+    let soundInterval = null;
+    if (config.sound_enabled && soundReady) {
+      soundInterval = startFlipSound();
+    }
+
+    // Group by column for wave sweep
+    const byCol = {};
+    for (const ch of changes) {
+      if (!byCol[ch.c]) byCol[ch.c] = [];
+      byCol[ch.c].push(ch);
+    }
+
+    let totalFlips = 0;
+    let completedFlips = 0;
+
+    for (const ch of changes) totalFlips++;
+
+    const onAllDone = () => {
+      // Update state
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          currentGrid[r][c] = targetGrid[r][c];
+          currentColors[r][c] = targetColors[r][c];
+        }
+      }
+      if (soundInterval) stopFlipSound(soundInterval);
+      isFlipping = false;
+    };
+
+    // Launch flips column by column
+    const colNumbers = Object.keys(byCol).map(Number).sort((a, b) => a - b);
+    const minCol = colNumbers[0];
+    const maxCol = colNumbers[colNumbers.length - 1];
+    const colRange = maxCol - minCol || 1;
+
+    for (const col of colNumbers) {
+      const delay = ((col - minCol) / colRange) * WAVE_DURATION_MS;
+      const tilesInCol = byCol[col];
+
+      setTimeout(() => {
+        for (const ch of tilesInCol) {
+          flipTile(ch.r, ch.c, ch.target, ch.color, () => {
+            completedFlips++;
+            if (completedFlips >= totalFlips) {
+              onAllDone();
+            }
+          });
+        }
+      }, delay);
+    }
+  }
+
+  function flipTile(r, c, target, color, onDone) {
+    const inner = tiles[r][c];
+    let flipCount = 0;
+    const totalFlips = FLIPS_PER_TILE + Math.floor(Math.random() * 4); // slight randomness
+
+    const doFlip = () => {
+      flipCount++;
+      if (flipCount >= totalFlips) {
+        // Final flip: land on target
+        inner.textContent = target;
+        applyTileColor(inner, color);
+        inner.classList.remove('flipping');
+        void inner.offsetWidth; // force reflow
+        inner.classList.add('flipping');
+        if (onDone) onDone();
+        return;
+      }
+
+      // Intermediate flip: random character
+      const randChar = CHARS[Math.floor(Math.random() * CHARS.length)];
+      inner.textContent = randChar === ' ' ? '' : randChar;
+      inner.style.color = ''; // default color during cycling
+      inner.classList.remove('flipping');
+      void inner.offsetWidth;
+      inner.classList.add('flipping');
+
+      setTimeout(doFlip, FLIP_INTERVAL_MS);
+    };
+
+    doFlip();
+  }
+
+  function applyTileColor(inner, color) {
+    if (color) {
+      inner.style.color = color;
+    } else {
+      inner.style.color = ''; // revert to CSS default (white on dark tile)
+    }
+  }
+
+  // ===== MESSAGE ROTATION =====
+  function showNextMessage() {
+    updateBackground(); // check time-of-day on each rotation
+
+    const eligible = getEligibleMessages();
+    if (eligible.length === 0) return;
+
+    messageIndex = messageIndex % eligible.length;
+    const msg = eligible[messageIndex];
+    const parsed = parseMessage(msg.text);
+    const { grid, colors } = layoutMessage(parsed);
+
+    flipToGrid(grid, colors);
+    messageIndex = (messageIndex + 1) % eligible.length;
+  }
+
+  function getEligibleMessages() {
+    const hour = new Date().getHours();
+    const dayStart = config.day_start_hour || 7;
+    const nightStart = config.night_start_hour || 20;
+    const isDay = hour >= dayStart && hour < nightStart;
+
+    return messages.filter(m => {
+      const sched = m.schedule || 'always';
+      if (sched === 'always') return true;
+      if (sched === 'day_only' && isDay) return true;
+      if (sched === 'night_only' && !isDay) return true;
+      return false;
+    });
+  }
+
+  function startRotation() {
+    if (rotationTimer) clearInterval(rotationTimer);
+    if (config.mode === 'rotate') {
+      const interval = (config.rotation_interval_seconds || 30) * 1000;
+      rotationTimer = setInterval(showNextMessage, interval);
+    }
+  }
+
+  // ===== SOUND ENGINE =====
+  function initSound() {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Generate a mechanical click sound using synthesis
+      // (More reliable than base64 audio on diverse devices)
+      const sampleRate = audioCtx.sampleRate;
+      const duration = 0.015; // 15ms click
+      const length = Math.floor(sampleRate * duration);
+      clickBuffer = audioCtx.createBuffer(1, length, sampleRate);
+      const data = clickBuffer.getChannelData(0);
+
+      for (let i = 0; i < length; i++) {
+        const t = i / sampleRate;
+        // Sharp attack, fast decay — mechanical click
+        const envelope = Math.exp(-t * 300);
+        const noise = (Math.random() * 2 - 1);
+        const tone = Math.sin(2 * Math.PI * 1200 * t) * 0.3;
+        data[i] = (noise * 0.7 + tone) * envelope;
+      }
+
+      soundReady = true;
+    } catch (e) {
+      console.warn('Sound init failed:', e);
+      soundReady = false;
+    }
+  }
+
+  function playClick() {
+    if (!soundReady || !audioCtx || !clickBuffer) return;
+    try {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = clickBuffer;
+
+      // Slight pitch variation for realism
+      source.playbackRate.value = 0.9 + Math.random() * 0.2;
+
+      const gain = audioCtx.createGain();
+      gain.gain.value = (config.sound_volume || 0.5) * (0.3 + Math.random() * 0.4);
+
+      source.connect(gain);
+      gain.connect(audioCtx.destination);
+      source.start();
+    } catch (e) {
+      // Silently fail — sound is non-critical
+    }
+  }
+
+  function startFlipSound() {
+    const interval = setInterval(() => {
+      playClick();
+    }, 40 + Math.random() * 30);
+    return interval;
+  }
+
+  function stopFlipSound(interval) {
+    // Fade out: keep clicking but slower, then stop
+    setTimeout(() => clearInterval(interval), 300);
+  }
+
+  // ===== LAUNCH =====
+  // Handle autoplay policy: resume audio on first user gesture
+  document.addEventListener('click', () => {
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+  }, { once: true });
+
+  // Start
+  init();
+
+})();
+</script>
+</body>
+</html>

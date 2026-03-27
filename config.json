@@ -1,0 +1,41 @@
+{
+  "mode": "rotate",
+  "rotation_interval_seconds": 30,
+  "config_refresh_minutes": 60,
+  "background": "auto",
+  "sound_enabled": true,
+  "sound_volume": 0.5,
+  "day_start_hour": 7,
+  "night_start_hour": 20,
+  "symbols": [
+    { "shortcode": "heart", "display": "❤", "color": "#FF0000" },
+    { "shortcode": "star", "display": "★", "color": "#FFD700" },
+    { "shortcode": "sun", "display": "☀" },
+    { "shortcode": "moon", "display": "☽" },
+    { "shortcode": "music", "display": "♪" },
+    { "shortcode": "flag", "display": "⚑" },
+    { "shortcode": "arrow_r", "display": "→" },
+    { "shortcode": "arrow_l", "display": "←" },
+    { "shortcode": "blue", "display": "●", "color": "#0000FF" },
+    { "shortcode": "green", "display": "●", "color": "#00AA00" },
+    { "shortcode": "orange", "display": "●", "color": "#FF8800" }
+  ],
+  "messages": [
+    {
+      "text": "GOOD MORNING {heart}",
+      "schedule": "day_only"
+    },
+    {
+      "text": "SWEET DREAMS {moon}",
+      "schedule": "night_only"
+    },
+    {
+      "text": "THE BEST IS YET TO COME",
+      "schedule": "always"
+    },
+    {
+      "text": "RYAN {heart} BUNKER FAMILY",
+      "schedule": "always"
+    }
+  ]
+}
